@@ -242,7 +242,7 @@ async def authed_get_json(
 
 @app.get("/")
 async def index():
-    return {"version": API_VERSION, "HIFI-API": "v2.0", "Repo": "https://github.com/uimaxbai/hifi-api"}
+    return {"version": API_VERSION, "Repo": "https://github.com/uimaxbai/hifi-api"}
 
 @app.get("/info/")
 async def get_info(id: int):
