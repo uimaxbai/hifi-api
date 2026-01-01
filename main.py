@@ -318,7 +318,11 @@ async def get_album(id: int):
 
 
 @app.get("/playlist/")
-async def get_playlist(id: str = Query(..., min_length=1), limit: int = Query(100, ge=1, le=500)):
+async def get_playlist(
+    id: str = Query(..., min_length=1),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
     """Fetch playlist metadata plus items concurrently, using shared client and single token."""
 
     token, cred = await get_tidal_token_for_cred()
@@ -338,7 +342,7 @@ async def get_playlist(id: str = Query(..., min_length=1), limit: int = Query(10
 
     playlist_data, items_data = await asyncio.gather(
         fetch(playlist_url, {"countryCode": "US"}),
-        fetch(items_url, {"countryCode": "US", "limit": limit}),
+        fetch(items_url, {"countryCode": "US", "limit": limit, "offset": offset}),
     )
 
     return {
