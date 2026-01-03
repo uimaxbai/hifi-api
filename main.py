@@ -312,9 +312,37 @@ async def search(
     raise HTTPException(status_code=400, detail="Provide one of s, a, al, v, or p")
 
 @app.get("/album/")
-async def get_album(id: int):
-    url = f"https://api.tidal.com/v1/albums/{id}/items"
-    return await make_request(url, params={"limit": 100, "countryCode": "US"})
+async def get_album(
+    id: int = Query(..., description="Album ID"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    token, cred = await get_tidal_token_for_cred()
+
+    album_url = f"https://api.tidal.com/v1/albums/{id}"
+    items_url = f"https://api.tidal.com/v1/albums/{id}/items"
+
+    async def fetch(url: str, params: Optional[dict] = None):
+        nonlocal token, cred
+        payload, token, cred = await authed_get_json(
+            url,
+            params=params,
+            token=token,
+            cred=cred,
+        )
+        return payload
+
+    album_data, items_data = await asyncio.gather(
+        fetch(album_url, {"countryCode": "US"}),
+        fetch(items_url, {"countryCode": "US", "limit": limit, "offset": offset}),
+    )
+
+    album_data["items"] = items_data.get("items", items_data)
+
+    return {
+        "version": API_VERSION,
+        "data": album_data,
+    }
 
 
 @app.get("/mix/")
