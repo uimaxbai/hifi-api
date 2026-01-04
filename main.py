@@ -347,19 +347,42 @@ async def get_album(
 
 @app.get("/mix/")
 async def get_mix(
-    id: str = Query(..., description="Mix ID"),
-    country_code: str = Query("US", description="Country Code"),
+    id: str = Query(..., description="Mix ID")
 ):
     """Fetch items from a Tidal mix by its ID."""
     token, cred = await get_tidal_token_for_cred()
-    url = f"https://api.tidal.com/v1/mixes/{id}/items"
+    url = "https://api.tidal.com/v1/pages/mix"
+    params = {
+        "mixId": id,
+        "countryCode": "US",
+        "deviceType": "BROWSER",
+    }
+
     data, _, _ = await authed_get_json(
         url,
-        params={"countryCode": country_code},
+        params=params,
         token=token,
         cred=cred,
     )
-    return {"version": API_VERSION, "items": data.get("items", [])}
+
+    header = {}
+    items = []
+
+    rows = data.get("rows", [])
+    for row in rows:
+        modules = row.get("modules", [])
+        for module in modules:
+            if module.get("type") == "MIX_HEADER":
+                header = module.get("mix", {})
+            elif module.get("type") == "TRACK_LIST":
+                paged_list = module.get("pagedList", {})
+                items = paged_list.get("items", [])
+
+    return {
+        "version": API_VERSION,
+        "mix": header,
+        "items": [item.get("item", item) for item in items],
+    }
 
 
 @app.get("/playlist/")
@@ -397,55 +420,108 @@ async def get_playlist(
     }
 
 
+def _extract_uuid_from_tidal_url(href: str) -> Optional[str]:
+    """Extract and reconstruct a hyphenated UUID from a Tidal resource URL."""
+    parts = href.split("/") if href else []
+    return "-".join(parts[4:9]) if len(parts) >= 9 else None
+
+
 @app.get("/artist/similar/")
 async def get_similar_artists(
     id: int = Query(..., description="Artist ID"),
-    limit: int = Query(25, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    cursor: Union[int, str, None] = None
 ):
-    """Fetch artists similar to another by its ID."""
-    token, cred = await get_tidal_token_for_cred()
-    
-    url = f"https://api.tidal.com/v1/artists/{id}/similar"
+    """Fetch artists similar to another by its ID using V2 API."""
+    url = f"https://openapi.tidal.com/v2/artists/{id}/relationships/similarArtists"
     params = {
-        "limit": limit,
-        "offset": offset,
-        "countryCode": "US"
+        "page[cursor]": cursor,
+        "countryCode": "US",
+        "include": "similarArtists,similarArtists.profileArt"
     }
-    
-    data, _, _ = await authed_get_json(url, params=params, token=token, cred=cred)
-    return {"version": API_VERSION, "artists": data.get("items", [])}
+
+    payload, _, _ = await authed_get_json(url, params=params)
+    included = payload.get("included", [])
+    artists_map = {i["id"]: i for i in included if i["type"] == "artists"}
+    artworks_map = {i["id"]: i for i in included if i["type"] == "artworks"}
+
+    def resolve_artist(entry):
+        aid = entry["id"]
+        inc = artists_map.get(aid, {})
+        attr = inc.get("attributes", {})
+
+        pic_id = None
+        if art_data := inc.get("relationships", {}).get("profileArt", {}).get("data"):
+            if artwork := artworks_map.get(art_data[0].get("id")):
+                if files := artwork.get("attributes", {}).get("files"):
+                    pic_id = _extract_uuid_from_tidal_url(files[0].get("href"))
+
+        return {
+            **attr,
+            "id": int(aid) if aid.isdigit() else aid,
+            "picture": pic_id or attr.get("selectedAlbumCoverFallback"),
+            "url": f"http://www.tidal.com/artist/{aid}",
+            "relationType": "SIMILAR_ARTIST"
+        }
+
+    return {
+        "version": API_VERSION,
+        "artists": [resolve_artist(e) for e in payload.get("data", [])]
+    }
 
 
 @app.get("/album/similar/")
 async def get_similar_albums(
     id: int = Query(..., description="Album ID"),
-    limit: int = Query(25, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    cursor: Union[int, str, None] = None
 ):
-    """Fetch albums similar to another by its ID."""
-    token, cred = await get_tidal_token_for_cred()
-    
-    url = f"https://api.tidal.com/v1/albums/{id}/similar"
+    """Fetch albums similar to another by its ID using V2 API."""
+    url = f"https://openapi.tidal.com/v2/albums/{id}/relationships/similarAlbums"
     params = {
-        "limit": limit,
-        "offset": offset,
-        "countryCode": "US"
+        "page[cursor]": cursor,
+        "countryCode": "US",
+        "include": "similarAlbums,similarAlbums.coverArt"
     }
-    
-    data, _, _ = await authed_get_json(url, params=params, token=token, cred=cred)
-    return {"version": API_VERSION, "albums": data.get("items", [])}
+
+    payload, _, _ = await authed_get_json(url, params=params)
+    included = payload.get("included", [])
+    albums_map = {i["id"]: i for i in included if i["type"] == "albums"}
+    artworks_map = {i["id"]: i for i in included if i["type"] == "artworks"}
+
+    def resolve_album(entry):
+        aid = entry["id"]
+        inc = albums_map.get(aid, {})
+        attr = inc.get("attributes", {})
+
+        cover_id = None
+        if art_data := inc.get("relationships", {}).get("coverArt", {}).get("data"):
+            if artwork := artworks_map.get(art_data[0].get("id")):
+                if files := artwork.get("attributes", {}).get("files"):
+                    cover_id = _extract_uuid_from_tidal_url(files[0].get("href"))
+
+        return {
+            **attr,
+            "id": int(aid) if aid.isdigit() else aid,
+            "cover": cover_id,
+            "url": f"http://www.tidal.com/album/{aid}"
+        }
+
+    return {
+        "version": API_VERSION,
+        "albums": [resolve_album(e) for e in payload.get("data", [])]
+    }
 
 
 @app.get("/artist/")
 async def get_artist(
     id: Optional[int] = Query(default=None),
     f: Optional[int] = Query(default=None),
+    skip_tracks: bool = Query(default=False),
 ):
     """Artist detail or album+track aggregation.
 
     - id: basic artist metadata + cover URLs
     - f: fetch artist albums page and aggregate tracks across albums (capped concurrency)
+    - skip_tracks: if true, returns only albums without aggregating tracks (when using 'f')
     """
 
     if id is None and f is None:
@@ -463,6 +539,12 @@ async def get_artist(
         )
 
         picture = artist_data.get("picture")
+        fallback = artist_data.get("selectedAlbumCoverFallback")
+        
+        if not picture and fallback:
+            artist_data["picture"] = fallback
+            picture = fallback
+
         cover = None
         if picture:
             slug = picture.replace("-", "/")
@@ -478,15 +560,28 @@ async def get_artist(
     albums_url = f"https://api.tidal.com/v1/artists/{f}/albums"
     common_params = {"countryCode": "US", "limit": 100}
 
-    results = await asyncio.gather(
+    tasks = [
         authed_get_json(albums_url, params=common_params, token=token, cred=cred),
         authed_get_json(albums_url, params={**common_params, "filter": "EPSANDSINGLES"}, token=token, cred=cred),
-        return_exceptions=True
-    )
+    ]
+
+    if skip_tracks:
+        tasks.append(
+            authed_get_json(
+                f"https://api.tidal.com/v1/artists/{f}/toptracks",
+                params={"countryCode": "US", "limit": 15},
+                token=token,
+                cred=cred
+            )
+        )
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     unique_releases = []
     seen_ids = set()
-    for res in results:
+    
+    # Process albums (first 2 results)
+    for res in results[:2]:
         if isinstance(res, tuple) and len(res) > 0:
             data, token, cred = res # Update tokens from latest responses
             for item in data.get("items", []):
@@ -498,6 +593,18 @@ async def get_artist(
 
     album_ids: List[int] = [item["id"] for item in unique_releases]
     page_data = {"items": unique_releases}
+
+    if skip_tracks:
+        top_tracks = []
+        if len(results) > 2:
+            res = results[2]
+            if isinstance(res, tuple) and len(res) > 0:
+                data, token, cred = res
+                top_tracks = data.get("items", [])
+            elif isinstance(res, Exception):
+                print(f"Error fetching top tracks: {res}")
+        
+        return {"version": API_VERSION, "albums": page_data, "tracks": top_tracks}
 
     if not album_ids:
         return {"version": API_VERSION, "albums": page_data, "tracks": []}
