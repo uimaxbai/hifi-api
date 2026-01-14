@@ -332,12 +332,31 @@ async def get_album(
         )
         return payload
 
-    album_data, items_data = await asyncio.gather(
-        fetch(album_url, {"countryCode": "US"}),
-        fetch(items_url, {"countryCode": "US", "limit": limit, "offset": offset}),
-    )
+    tasks = [fetch(album_url, {"countryCode": "US"})]
 
-    album_data["items"] = items_data.get("items", items_data)
+    max_chunk = 100
+    current_offset = offset
+    remaining_limit = limit
+
+    while remaining_limit > 0:
+        chunk_size = min(remaining_limit, max_chunk)
+        tasks.append(
+            fetch(items_url, {"countryCode": "US", "limit": chunk_size, "offset": current_offset})
+        )
+        current_offset += chunk_size
+        remaining_limit -= chunk_size
+
+    results = await asyncio.gather(*tasks)
+
+    album_data = results[0]
+    items_pages = results[1:]
+
+    all_items = []
+    for page in items_pages:
+        page_items = page.get("items", page)
+        all_items.extend(page_items)
+
+    album_data["items"] = all_items
 
     return {
         "version": API_VERSION,
