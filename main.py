@@ -498,13 +498,14 @@ async def get_similar_albums(
     params = {
         "page[cursor]": cursor,
         "countryCode": "US",
-        "include": "similarAlbums,similarAlbums.coverArt"
+        "include": "similarAlbums,similarAlbums.coverArt,similarAlbums.artists"
     }
 
     payload, _, _ = await authed_get_json(url, params=params)
     included = payload.get("included", [])
     albums_map = {i["id"]: i for i in included if i["type"] == "albums"}
     artworks_map = {i["id"]: i for i in included if i["type"] == "artworks"}
+    artists_map = {i["id"]: i for i in included if i["type"] == "artists"}
 
     def resolve_album(entry):
         aid = entry["id"]
@@ -517,10 +518,21 @@ async def get_similar_albums(
                 if files := artwork.get("attributes", {}).get("files"):
                     cover_id = _extract_uuid_from_tidal_url(files[0].get("href"))
 
+        artist_list = []
+        if art_data := inc.get("relationships", {}).get("artists", {}).get("data"):
+             for a_entry in art_data:
+                 if a_obj := artists_map.get(a_entry["id"]):
+                     a_id = a_obj["id"]
+                     artist_list.append({
+                         "id": int(a_id) if a_id.isdigit() else a_id,
+                         "name": a_obj["attributes"]["name"]
+                     })
+
         return {
             **attr,
             "id": int(aid) if aid.isdigit() else aid,
             "cover": cover_id,
+            "artists": artist_list,
             "url": f"http://www.tidal.com/album/{aid}"
         }
 
