@@ -271,6 +271,14 @@ async def get_track(id: int, quality: str = "HI_RES_LOSSLESS"):
     }
     return await make_request(track_url, params=params)
 
+
+@app.get("/recommendations/")
+async def get_recommendations(id: int):
+    recommendations_url = f"https://tidal.com/v1/tracks/{id}/recommendations"
+    params = {"limit": "20", "countryCode": "US"}
+    return await make_request(recommendations_url, params=params)
+
+
 @app.api_route("/search/", methods=["GET"])
 async def search(
     s: Union[str, None] = Query(default=None),

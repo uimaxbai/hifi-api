@@ -226,9 +226,105 @@ Where `manifest` is base64 encoded MPD manifest (use `"manifestMimeType": "appli
 </MPD>
 ```
 
+### `GET /recommendations/`
+
+#### Params
+
+- `id`: `int` (required) - the Tidal ID of the track.
+
+#### Response
+
+##### Recommendations
+
+`200 OK`
+
+```json
+{
+  "version": "2.3",
+  "data": {
+    "limit": 20,
+    "offset": 0,
+    "totalNumberOfItems": 25,
+    "items": [
+      {
+        "track": {
+          "id": 70689598,
+          "title": "Chasing Colors (feat. Noah Cyrus)",
+          "duration": 195,
+          "replayGain": -13.06,
+          "peak": 0.988617,
+          "allowStreaming": true,
+          "streamReady": true,
+          "payToStream": false,
+          "adSupportedStreamReady": true,
+          "djReady": true,
+          "stemReady": false,
+          "streamStartDate": "2017-02-24T00:00:00.000+0000",
+          "premiumStreamingOnly": false,
+          "trackNumber": 1,
+          "volumeNumber": 1,
+          "version": null,
+          "popularity": 66,
+          "copyright": "2017 Joytime Collective",
+          "bpm": 150,
+          "key": "Ab",
+          "keyScale": "MINOR",
+          "url": "http://www.tidal.com/track/70689598",
+          "isrc": "TCACY1707257",
+          "editable": false,
+          "explicit": false,
+          "audioQuality": "LOSSLESS",
+          "audioModes": [
+            "STEREO"
+          ],
+          "mediaMetadata": {
+            "tags": [
+              "LOSSLESS"
+            ]
+          },
+          "upload": false,
+          "accessType": "PUBLIC",
+          "spotlighted": false,
+          "artist": {
+            "id": 8539374,
+            "name": "Marshmello & Ookay",
+            "handle": null,
+            "type": "MAIN",
+            "picture": null
+          },
+          "artists": [
+            {
+              "id": 8539374,
+              "name": "Marshmello & Ookay",
+              "handle": null,
+              "type": "MAIN",
+              "picture": null
+            }
+          ],
+          "album": {
+            "id": 70689597,
+            "title": "Chasing Colors (feat. Noah Cyrus)",
+            "cover": "ae714a47-be3b-490f-b6a6-5688fa58263b",
+            "vibrantColor": "#61c4e2",
+            "videoCover": null
+          },
+          "mixes": {
+            "TRACK_MIX": "001869ef55d3f5ef71ad9f35382e48"
+          }
+        },
+        "sources": [
+          "SUGGESTED_TRACKS"
+        ]
+      },
+      <truncated>
+    ]
+  }
+}
+```
+
 ### `GET /search/`
 
-#### Params
+#### Params
 
 Specify only **one** of the following - specifying more doesn't do anything.
 
