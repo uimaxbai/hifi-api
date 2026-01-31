@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
         if _http_client:
             await _http_client.aclose()
 
-API_VERSION = "2.3"
+API_VERSION = "2.4"
 
 app = FastAPI(
     title="HiFi-RestAPI",
